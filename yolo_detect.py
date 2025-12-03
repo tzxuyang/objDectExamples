@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass
 from src.utils import draw_bbox, create_file_list
 from src.yolo_train import YOLOCustom
-from src.auto_labeling import ObjectDetector, CreateYoloDataset
+from src.auto_labeling import ObjectDetector, CreateYoloDataset, autolabel
 
 # auto label model path
 _MODEL_PATH = "Qwen/Qwen3-VL-4B-Instruct"
@@ -65,26 +65,17 @@ if __name__ == "__main__":
         trgt_dir = config.train_label
         path_list = create_file_list(root_dir)
 
-        for path in path_list:
+        for i, path in enumerate(path_list):
             file_name = path.replace(root_dir, trgt_dir).replace(".jpg", ".txt")
             logging.info(f"Processing image: {path}")
-            result = ObjDetectLabeler.detect_object(path, "circular ports on the white board", max_new_tokens=2048)
-            bboxs, labels = ObjDetectLabeler.extract_bbox(result)
-            try:
-                CreateYoloLabel.create_yolo_label(
-                    bboxs, 
-                    labels, 
-                    (1000, 1000),  # (height, width)
-                    file_name
+            result, bboxs, labels = autolabel(ObjDetectLabeler, CreateYoloLabel, path, file_name, "circular ports on the white board", max_new_tokens=2048)
+            if i % 5 == 0 and i < 50:
+                draw_bbox(
+                    path,
+                    bboxs[:],
+                    labels[:],
+                    new_size = (1000, 1000)
                 )
-            except:
-                logging.info(f"Result is {result} and bboxs are {bboxs} and labels are {labels}")
-            draw_bbox(
-                path,
-                bboxs[:],
-                labels[:],
-                new_size = (1000, 1000)
-            )
             logging.info(f"Saved label file as {file_name}.")
 
         # create val data set
@@ -92,26 +83,17 @@ if __name__ == "__main__":
         trgt_dir = config.val_label
         path_list = create_file_list(root_dir)
 
-        for path in path_list:
+        for i, path in enumerate(path_list):
             file_name = path.replace(root_dir, trgt_dir).replace(".jpg", ".txt")
             logging.info(f"Processing image: {path}")
-            result = ObjDetectLabeler.detect_object(path, "circular ports on the white board", max_new_tokens=2048)
-            bboxs, labels = ObjDetectLabeler.extract_bbox(result)
-            try:
-                CreateYoloLabel.create_yolo_label(
-                    bboxs, 
-                    labels, 
-                    (1000, 1000),  # (height, width)
-                    file_name
+            result, bboxs, labels = autolabel(ObjDetectLabeler, CreateYoloLabel, path, file_name, "circular ports on the white board", max_new_tokens=2048)
+            if i % 2 ==0 and i < 50:
+                draw_bbox(
+                    path,
+                    bboxs[:],
+                    labels[:],
+                    new_size = (1000, 1000)
                 )
-            except:
-                logging.info(f"Result is {result} and bboxs are {bboxs} and labels are {labels}")
-            draw_bbox(
-                path,
-                bboxs[:],
-                labels[:],
-                new_size = (1000, 1000)
-            )
             logging.info(f"Saved label file as {file_name}.")
         plt.show()
     else:

@@ -116,11 +116,11 @@ class CreateYoloDataset:
                 print(f"Error writing to file '{file_name}': {e}")
 
 @retry(stop_max_attempt_number=5, wait_fixed=100)
-def autolabel(path, prompt, max_new_tokens=2048):
-    result = ObjDetectLabeler.detect_object(path, prompt, max_new_tokens=max_new_tokens)
+def autolabel(Labeler, Yolodataset, path, file_name, prompt, max_new_tokens=2048):
+    result = Labeler.detect_object(path, prompt, max_new_tokens=max_new_tokens)
     try:
-        bboxs, labels = ObjDetectLabeler.extract_bbox(result)
-        CreateYoloLabel.create_yolo_label(
+        bboxs, labels = Labeler.extract_bbox(result)
+        Yolodataset.create_yolo_label(
             bboxs, 
             labels, 
             (1000, 1000),  # (height, width)
@@ -143,7 +143,7 @@ if __name__ == "__main__":
     for path in path_list:
         file_name = path.replace(root_dir, trgt_dir).replace(".jpg", ".txt")
         logging.info(f"Processing image: {path}")
-        result, bboxs, labels = autolabel(path, "circular ports on the white board", max_new_tokens=2048)
+        result, bboxs, labels = autolabel(ObjDetectLabeler, CreateYoloLabel, path, file_name, "circular ports on the white board", max_new_tokens=2048)
         utils.draw_bbox(
             path,
             bboxs[:],
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     for path in path_list:
         file_name = path.replace(root_dir, trgt_dir).replace(".jpg", ".txt")
         logging.info(f"Processing image: {path}")
-        result, bboxs, labels = autolabel(path, "circular ports on the white board", max_new_tokens=2048)
+        result, bboxs, labels = autolabel(ObjDetectLabeler, CreateYoloLabel, path, file_name, "circular ports on the white board", max_new_tokens=2048)
         utils.draw_bbox(
             path,
             bboxs[:],
@@ -169,22 +169,3 @@ if __name__ == "__main__":
         )
         logging.info(f"Saved label file as {file_name}.")
     plt.show()
-
-    # image_path = "/home/yang/MyRepos/object_detection/images/dog4.jpg"
-    # image_path = "/home/yang/datasets/visual_image/edited_image_5.jpg"
-    # # result = ObjDetectLabeler.detect_object(image_path, "objects in the image")
-    # result = ObjDetectLabeler.detect_object(image_path, "circular ports on the white board")
-
-    # bboxs, labels = ObjDetectLabeler.extract_bbox(result)
-
-    # a, b, c, d = [0, 1, 2, 3]  # Dummy to avoid syntax error
-    # print(a)
-    # print("Bounding Boxes:", bboxs)
-    # print("Labels:", labels)
-
-    # utils.draw_bbox(
-    #     image_path,
-    #     bboxs[:],
-    #     labels[:],
-    #     new_size = (1000, 1000)
-    # )
