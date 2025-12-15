@@ -1,0 +1,12 @@
+{"time":"2025-12-15T18:46:49.612103829+08:00","level":"INFO","msg":"stream: starting","core version":"0.23.1"}
+{"time":"2025-12-15T18:46:52.431570527+08:00","level":"INFO","msg":"stream: created new stream","id":"xdvuj21z"}
+{"time":"2025-12-15T18:46:52.431622325+08:00","level":"INFO","msg":"handler: started","stream_id":"xdvuj21z"}
+{"time":"2025-12-15T18:46:52.431710492+08:00","level":"INFO","msg":"stream: started","id":"xdvuj21z"}
+{"time":"2025-12-15T18:46:52.431716093+08:00","level":"INFO","msg":"writer: started","stream_id":"xdvuj21z"}
+{"time":"2025-12-15T18:46:52.431734297+08:00","level":"INFO","msg":"sender: started","stream_id":"xdvuj21z"}
+{"time":"2025-12-15T18:47:50.515274945+08:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/tzxuyang-fii/dino_classifier/xdvuj21z/file_stream\": unexpected EOF"}
+{"time":"2025-12-15T18:48:21.771446835+08:00","level":"INFO","msg":"stream: closing","id":"xdvuj21z"}
+{"time":"2025-12-15T18:48:23.493773954+08:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-12-15T18:48:25.402005626+08:00","level":"INFO","msg":"handler: closed","stream_id":"xdvuj21z"}
+{"time":"2025-12-15T18:48:25.402062634+08:00","level":"INFO","msg":"sender: closed","stream_id":"xdvuj21z"}
+{"time":"2025-12-15T18:48:25.402069617+08:00","level":"INFO","msg":"stream: closed","id":"xdvuj21z"}

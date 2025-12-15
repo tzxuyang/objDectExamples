@@ -1,0 +1,72 @@
+_wandb:
+    value:
+        cli_version: 0.23.1
+        e:
+            a7xxm9xi3hoks15u6kg302jrv4ipl3fn:
+                codePath: src/dino_train.py
+                codePathLocal: src/dino_train.py
+                cpu_count: 16
+                cpu_count_logical: 32
+                cudaVersion: "12.4"
+                disk:
+                    /:
+                        total: "2014574526464"
+                        used: "1251537330176"
+                email: yanxu@umich.edu
+                executable: /home/yang/miniconda3/envs/object_dect/bin/python
+                git:
+                    commit: 24e449f34cfde799a4980fef36f4aebeac0adcec
+                    remote: git@github.com:tzxuyang/objDectExamples.git
+                gpu: NVIDIA RTX 5880 Ada Generation
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 14080
+                      memoryTotal: "51527024640"
+                      name: NVIDIA RTX 5880 Ada Generation
+                      uuid: GPU-3f8bb89b-c5f3-d5ec-bfb1-d23274c838cf
+                host: yang
+                memory:
+                    total: "64892043264"
+                os: Linux-6.8.0-87-generic-x86_64-with-glibc2.35
+                program: /home/yang/MyRepos/object_detection/src/dino_train.py
+                python: CPython 3.13.7
+                root: /home/yang/MyRepos/object_detection
+                startedAt: "2025-12-15T10:46:15.269438Z"
+                writerId: a7xxm9xi3hoks15u6kg302jrv4ipl3fn
+        m: []
+        python_version: 3.13.7
+        t:
+            "1":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 63
+            "2":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 63
+            "3":
+                - 16
+            "4": 3.13.7
+            "5": 0.23.1
+            "6": 4.57.1
+            "12": 0.23.1
+            "13": linux-x86_64
+architecture:
+    value: DINOv3 + Custom Head
+batch_size:
+    value: 32
+dataset:
+    value: Port Classification
+epochs:
+    value: 240
+learning_rate:
+    value: 240
