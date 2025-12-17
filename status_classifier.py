@@ -8,55 +8,119 @@ sys.path.insert(0, os.path.join(project_root, 'src'))
 
 import tyro 
 import logging
-import matplotlib.pyplot as plt
 from dataclasses import dataclass
-from src.utils import draw_bbox, create_file_list
-from src.yolo_train import YOLOCustom
-from src.auto_labeling import AiLabeler, CreateYoloDataset, CreateClassDataset, classification_autolabel
+from src.utils import create_file_list
+from src.auto_labeling import AiLabeler, CreateClassDataset, classification_autolabel
+from src.dino_train import DinoClassifier, set_seed, train_classifier
+import json
+import torch
 
 # auto label model path
 _MODEL_PATH = "Qwen/Qwen3-VL-4B-Instruct"
+_AUTO_LABEL_SHOW_ITER = 5
+_AUTO_LABEL_SHOW_MAX = 50
+_PROJECT_NAME = "dino_classifier_177_dinov3_small"
+# _PROJECT_NAME = "dino_classifier_177_dino_large"
+_WANDB_KEY = "93205eda06a813b688c0462d11f09886a0cf7ae8"
+_NUM_CLASSES = 6
+_SEED = 77
+
+@dataclass
+class ClassifierConfig:
+    mode: str # modes with options ["train", "predict", "autolabel"]
+    project_name: str = _PROJECT_NAME # wandb project name
+    wandb_key: str = _WANDB_KEY # wandb api key
+    checkpoint: str = "./checkpoints/dino_classifier.pth" # yolo prediction check point
+    image: str = "./images/port_2.jpg" # image path
+    train_image: str = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/train"  # autolabeling train image path
+    train_label: str = "/home/yang/MyRepos/tensorRT/datasets/port_cls/labels/train" # autolabeling train label writing path
+    val_image: str = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/val" # autolabeling val image path
+    val_label: str = "/home/yang/MyRepos/tensorRT/datasets/port_cls/labels/val" # autolabeling val label writing path
+
+def predict(checkpoint, image_path):
+    dino_classifier = DinoClassifier(num_classes=_NUM_CLASSES)
+    dino_classifier.load_state_dict(torch.load(checkpoint))
+    dino_classifier.to(device := torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    dino_classifier.eval()
+
+    input_tensor = dino_classifier.process_image(image_path).to(device)
+
+    with torch.no_grad():
+        class_name, confidence = dino_classifier.predict(input_tensor, class_names=['unplugged', 'port1', 'port2', 'port3', 'port4', 'port5'])
+        logging.info(f"{image_path} classified as {class_name} with confidence {confidence:.4f}")
+    
+def classifier_autolabel(train_image_dir, train_label_dir, val_image_dir, val_label_dir, label_prompt, max_new_tokens=1024):
+    classifier = AiLabeler(_MODEL_PATH)
+    ClassLabel = CreateClassDataset()
+
+    # create train data set
+    root_dir = train_image_dir
+    trgt_dir = train_label_dir
+    path_list = create_file_list(root_dir)
+
+    for i, path in enumerate(path_list):
+        file_name = path.replace(root_dir, trgt_dir).replace(".jpg", ".txt")
+        logging.info(f"Processing image: {path}")
+        result, plugin, connected_port = classification_autolabel(classifier, ClassLabel, path, file_name, label_prompt, max_new_tokens=max_new_tokens)
+        if i % _AUTO_LABEL_SHOW_ITER == 0 and i < _AUTO_LABEL_SHOW_MAX:
+            logging.info(f"Description: {result}, Is Plugged In: {plugin}, Connected to Port: {connected_port}")
+        logging.info(f"Saved label file as {file_name}.")
+
+    # create val data set
+    root_dir = val_image_dir
+    trgt_dir = val_label_dir
+    path_list = create_file_list(root_dir)
+
+    for i, path in enumerate(path_list):
+        file_name = path.replace(root_dir, trgt_dir).replace(".jpg", ".txt")
+        logging.info(f"Processing image: {path}")
+        result, plugin, connected_port = classification_autolabel(classifier, ClassLabel, path, file_name, label_prompt, max_new_tokens=max_new_tokens)
+        if i % _AUTO_LABEL_SHOW_ITER == 0 and i < _AUTO_LABEL_SHOW_MAX:
+            logging.info(f"Description: {result}, Is Plugged In: {plugin}, Connected to Port: {connected_port}")
+        logging.info(f"Saved label file as {file_name}.")
 
 if __name__ == "__main__":
-    label_prompt = """
-    Please describe this image. Descrbe if the cable with green port is plugged in to the circular port and which port it is connected to in the format with as follows:
-    {
-        "description": "",
-        "Is plugged in": true/false, 
-        "connected to port (int)": "",
-    }
-    """
-    mode = "autolabel"
+    config = tyro.cli(ClassifierConfig)
 
-    if mode == "autolabel":
-        classifier = AiLabeler(_MODEL_PATH)
-        ClassLabel = CreateClassDataset()
+    # python status_classifier.py --mode autolabel --train_image /home/yang/MyRepos/tensorRT/datasets/port_cls/images/train --train_label /home/yang/MyRepos/tensorRT/datasets/port_cls/labels/train2 \
+    # --val_image /home/yang/MyRepos/tensorRT/datasets/port_cls/images/val --val_label /home/yang/MyRepos/tensorRT/datasets/port_cls/labels/val2
+    if config.mode == "autolabel":
+        label_prompt = """
+        Please describe this image. Descrbe if the cable with green port is plugged in to the circular port and which port it is connected to in the format with as follows:
+        {
+            "description": "",
+            "Is plugged in": true/false, 
+            "connected to port (int)": "",
+        }
+        """
+        classifier_autolabel(
+            train_image_dir = config.train_image, 
+            train_label_dir = config.train_label, 
+            val_image_dir = config.val_image, 
+            val_label_dir = config.val_label, 
+            label_prompt = label_prompt, 
+            max_new_tokens=1024
+        )
 
-        # create train data set
-        root_dir = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/train"
-        trgt_dir = "/home/yang/MyRepos/tensorRT/datasets/port_cls/labels/train"
-        path_list = create_file_list(root_dir)
+    elif config.mode == "train":
+    # python status_classifier.py --mode train --project_name dino_classifier_177_dinov3_small
+        train_config = json.load(open("data_configs/train_config.json", "r"))
+        train_classifier(
+            project_name=config.project_name,
+            train_file_directory=train_config["train_image"],
+            train_label_directory=train_config["train_label"],
+            test_file_directory=train_config["val_image"],
+            test_label_directory=train_config["val_label"],
+            num_classes=train_config["num_classes"],
+            batch_size=train_config["batch_size"],
+            lr_max=train_config["lr_max"],
+            lr_min=train_config["lr_min"],
+            epoch=train_config["epoch"],
+        )
 
-        for i, path in enumerate(path_list):
-            file_name = path.replace(root_dir, trgt_dir).replace(".jpg", ".txt")
-            logging.info(f"Processing image: {path}")
-            result, plugin, connected_port = classification_autolabel(classifier, ClassLabel, path, file_name, label_prompt, max_new_tokens=1024)
-            if i % 5 == 0 and i < 50:
-                logging.info(f"Description: {result}, Is Plugged In: {plugin}, Connected to Port: {connected_port}")
-            logging.info(f"Saved label file as {file_name}.")
-
-        # create val data set
-        root_dir = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/val"
-        trgt_dir = "/home/yang/MyRepos/tensorRT/datasets/port_cls/labels/val"
-        path_list = create_file_list(root_dir)
-
-        for i, path in enumerate(path_list):
-            file_name = path.replace(root_dir, trgt_dir).replace(".jpg", ".txt")
-            logging.info(f"Processing image: {path}")
-            result, plugin, connected_port = classification_autolabel(classifier, ClassLabel, path, file_name, label_prompt, max_new_tokens=1024)
-            if i % 5 == 0 and i < 50:
-                logging.info(f"Description: {result}, Is Plugged In: {plugin}, Connected to Port: {connected_port}")
-            logging.info(f"Saved label file as {file_name}.")
-
+    else:
+    # python status_classifier.py --mode predict --checkpoint ./checkpoints/dino_classifier.pth --image ./images/port_2.jpg
+        set_seed(_SEED)
+        predict(config.checkpoint, config.image)
 
     

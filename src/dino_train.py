@@ -4,6 +4,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmRestarts
 import torch  # torch
 import utils
 from PIL import Image
@@ -11,21 +12,47 @@ import logging
 from sklearn.metrics import classification_report, accuracy_score
 import os
 import wandb
+import random
 
 logging.basicConfig(level=logging.INFO)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+_PROJECT_NAME = "dino_classifier_177_dino_small_new"
+# _PROJECT_NAME = "dino_classifier_177_dino_large"
 _WANDB_KEY = "93205eda06a813b688c0462d11f09886a0cf7ae8"
-_EPOCH = 240
-_LR = 0.001
-_BATCH_SIZE = 32
+_EPOCH = 200
+_LR_init = 0.0003
+_LR_min = 0.0001
+_LR_init = 0.0008
+_LR_min = 0.0002
+_BATCH_SIZE = 128
+_BATCH_SIZE_VAL = 32
+_NUM_WORKERS = 12
+_SEED = 77
+
+def set_seed(seed: int = 42) -> None:
+    """Sets the random seed for reproducibility across Python, NumPy, and PyTorch."""
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed) # set PYTHONHASHSEED env var
+    torch.manual_seed(seed)
+    # If using multiple GPUs, set all seeds
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed) 
+    
+    # For complete determinism (may impact performance)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+    logging.info(torch.rand(2))
+    logging.info(f"Random seed set to {seed}")
 
 class DinoClassifier(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, hidden_dim=1024):
         super(DinoClassifier, self).__init__()
         # Load the pre-trained DINOv3 model from timm
         self.backbone = timm.create_model('timm/vit_small_patch16_dinov3.lvd1689m', pretrained=True, num_classes=0)
+        # self.backbone = timm.create_model('timm/vit_large_patch16_dinov3.lvd1689m', pretrained=True, num_classes=0)
         # Freeze the backbone parameters
         self.backbone.eval()  # set the model in evaluation mode
         self.num_classes = num_classes
@@ -34,10 +61,14 @@ class DinoClassifier(nn.Module):
         
         # Define a simple classification head
         self.head = nn.Sequential(
-            nn.Linear(self.backbone.num_features, 256),
+            nn.Linear(self.backbone.num_features, hidden_dim),
+            # nn.BatchNorm1d(hidden_dim),
             nn.ReLU(),
             nn.Dropout(p=0.1),
-            nn.Linear(256, num_classes)
+            nn.Linear(hidden_dim, hidden_dim//2),
+            nn.ReLU(),
+            nn.Dropout(p=0.1),
+            nn.Linear(hidden_dim//2, num_classes)
         )
 
     def forward(self, x):
@@ -49,16 +80,8 @@ class DinoClassifier(nn.Module):
         data_config = timm.data.resolve_model_data_config(self.backbone) 
         transform = timm.data.create_transform(
             **data_config,
-            is_training=True
+            is_training=False
         )
-        # print(data_config)
-        # transform = transforms.Compose([
-        #     transform_raw,
-        #     transforms.RandomRotation(10),
-        #     transforms.RandomHorizontalFlip(),
-        #     # transforms.RandomCrop(224, padding=10),
-        #     # transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-        # ])
         return transform
     
     def get_val_transform(self):
@@ -145,7 +168,8 @@ def init_wandb(project_name="dino_classifier", wandb_key=_WANDB_KEY, config=None
             "dataset": "Port Classification",
             "epochs": _EPOCH,
             "batch_size": _BATCH_SIZE,
-            "learning_rate": _EPOCH,
+            "learning_rate": _LR_init,
+            "eta_min": _LR_min
         }
     wandb.init(
         project=project_name,
@@ -157,6 +181,9 @@ def train_model(custom_model, train_loader, val_loader, **kwargs):
     criterion = nn.CrossEntropyLoss()
     # Adam to optimze the classification hear
     optimizer = optim.Adam(custom_model.head.parameters(), lr=kwargs.get('learning_rate', 0.001))
+    # Learning rate scheduler
+    scheduler = CosineAnnealingLR(optimizer, T_max=kwargs.get('num_epochs', 150), eta_min=kwargs.get('eta_min', 0.0001))
+
     num_epochs = kwargs.get('num_epochs', 150)
     for epoch in range(num_epochs):
         custom_model.train()  # set the model to train mode
@@ -184,8 +211,10 @@ def train_model(custom_model, train_loader, val_loader, **kwargs):
         wandb.log({
             "train_loss": running_loss_train,
             "val_loss": running_loss_val,
+            "lr": scheduler.get_last_lr()[0],
             "epoch": epoch
         })
+        scheduler.step()
     logging.info("Train completed")
 
 def test_model(custom_model, test_loader, class_names):
@@ -207,17 +236,19 @@ def test_model(custom_model, test_loader, class_names):
     logging.info(f"Test Accuracy: {accuracy:.4f}")
     logging.info("Classification Report:\n" + report)
 
-if __name__ == "__main__":
-    train_file_directory = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/train"
-    train_label_directory = "/home/yang/MyRepos/tensorRT/datasets/port_cls/labels/train"
-    test_file_directory = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/val"
-    test_label_directory = "/home/yang/MyRepos/tensorRT/datasets/port_cls/labels/val"
+def train_classifier(project_name, train_file_directory, train_label_directory, test_file_directory, test_label_directory, num_classes=6, batch_size=_BATCH_SIZE, lr_max=_LR_init, lr_min=_LR_min, epoch=_EPOCH):
+    # set device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # set seed
+    set_seed(_SEED)
+    logging.info(f"Training Dino Classifier model on device: {device} with seed {torch.seed()}")
 
     # init wandb
-    init_wandb()
+    init_wandb(project_name= project_name)
 
     # Load custom model
-    custom_model = DinoClassifier(num_classes=6)
+    custom_model = DinoClassifier(num_classes=num_classes)
     dim, num_classes,size = custom_model.get_info()
     logging.info(f"Custom Dino Classifier model created. with vit dimension of {dim} and num_classes: {num_classes} and model size: {size/1e6}M parameters")
     logging.info(custom_model)
@@ -240,20 +271,21 @@ if __name__ == "__main__":
 
     train_loader = DataLoader(
         train_dataset, 
-        batch_size=_BATCH_SIZE, 
+        batch_size=batch_size, 
         shuffle=True, 
-        num_workers=12
+        num_workers=_NUM_WORKERS
     )
     val_loader = DataLoader(
         val_dataset, 
-        batch_size=16, 
+        batch_size=_BATCH_SIZE_VAL, 
         shuffle=True, 
-        num_workers=12
+        num_workers=_NUM_WORKERS
     )
     # Train the model
     train_config = {
-        'learning_rate': 0.001,
-        'num_epochs': 240
+        'learning_rate': lr_max,
+        'num_epochs': epoch,
+        'eta_min': lr_min
     }
     train_model(custom_model, train_loader, val_loader, **train_config)
 
@@ -272,29 +304,63 @@ if __name__ == "__main__":
     logging.info(f"Model saved to {path}.")
 
     # Validate the model
-    trained_model = DinoClassifier(num_classes=6)
+    trained_model = DinoClassifier(num_classes=num_classes)
     trained_model.load_state_dict(torch.load(path))
     trained_model.to(device)
 
     # inference on val dataset
     trained_model.eval()
     logging.info("--------------------------------------------------------------------------------------------------")
-    val_dir = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/val"
+    val_dir = test_file_directory
     image_file_list = utils.create_file_list(val_dir)
     for image_path in image_file_list:
         image = Image.open(image_path).convert('RGB')
-        # image.show()
         input_tensor = trained_model.process_image(image_path)
         class_name, confidence = trained_model.predict(input_tensor, class_names=['unplugged', 'port1', 'port2', 'port3', 'port4', 'port5'])
         logging.info(f"{image_path} classified as {class_name} with confidence {confidence:.4f}")
 
     # evaluate on test dataset
-    logging.info("--------------------------------------------------------------------------------------------------")
+    logging.info("*********************************************Train set report: *********************************************")
+    transforms = custom_model.get_val_transform()
+    train_dataset = CustomDataset.fromDirectory(
+        train_file_directory, 
+        train_label_directory,
+        transform= transforms
+    )
+    test_loader = DataLoader(
+        train_dataset, 
+        batch_size=len(train_dataset), 
+        shuffle=False, 
+        num_workers=_NUM_WORKERS
+    )
+    test_model(trained_model, test_loader, class_names=['unplugged', 'port1', 'port2', 'port3', 'port4', 'port5'])
+
+    # evaluate on test dataset
+    logging.info("**********************************************Test set report: **********************************************")
     transforms = custom_model.get_val_transform()
     test_loader = DataLoader(
         val_dataset, 
         batch_size=len(val_dataset), 
         shuffle=False, 
-        num_workers=12
+        num_workers=_NUM_WORKERS
     )
     test_model(trained_model, test_loader, class_names=['unplugged', 'port1', 'port2', 'port3', 'port4', 'port5'])
+
+if __name__ == "__main__":
+    train_file_directory = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/train"
+    train_label_directory = "/home/yang/MyRepos/tensorRT/datasets/port_cls/labels/train"
+    test_file_directory = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/val"
+    test_label_directory = "/home/yang/MyRepos/tensorRT/datasets/port_cls/labels/val"
+
+    train_classifier(
+        _PROJECT_NAME, 
+        train_file_directory, 
+        train_label_directory, 
+        test_file_directory, 
+        test_label_directory, 
+        num_classes=6, 
+        batch_size=_BATCH_SIZE, 
+        lr_max=_LR_init, 
+        lr_min=_LR_min, 
+        epoch=_EPOCH
+    )

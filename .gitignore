@@ -3,3 +3,5 @@
 
 /runs/cls
 !/runs/cls/.gitkeep
+
+/wandb
