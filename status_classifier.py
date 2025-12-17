@@ -37,7 +37,7 @@ class ClassifierConfig:
     val_image: str = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/val" # autolabeling val image path
     val_label: str = "/home/yang/MyRepos/tensorRT/datasets/port_cls/labels/val" # autolabeling val label writing path
 
-def predict(checkpoint, image_path):
+def predict(checkpoint, image_path, class_names):
     dino_classifier = DinoClassifier(num_classes=_NUM_CLASSES)
     dino_classifier.load_state_dict(torch.load(checkpoint))
     dino_classifier.to(device := torch.device("cuda" if torch.cuda.is_available() else "cpu"))
@@ -46,7 +46,7 @@ def predict(checkpoint, image_path):
     input_tensor = dino_classifier.process_image(image_path).to(device)
 
     with torch.no_grad():
-        class_name, confidence = dino_classifier.predict(input_tensor, class_names=['unplugged', 'port1', 'port2', 'port3', 'port4', 'port5'])
+        class_name, confidence = dino_classifier.predict(input_tensor, class_names=class_names)
         logging.info(f"{image_path} classified as {class_name} with confidence {confidence:.4f}")
     
 def classifier_autolabel(train_image_dir, train_label_dir, val_image_dir, val_label_dir, label_prompt, max_new_tokens=1024):
@@ -111,7 +111,7 @@ if __name__ == "__main__":
             train_label_directory=train_config["train_label"],
             test_file_directory=train_config["val_image"],
             test_label_directory=train_config["val_label"],
-            num_classes=train_config["num_classes"],
+            class_names=train_config["class_names"],
             batch_size=train_config["batch_size"],
             lr_max=train_config["lr_max"],
             lr_min=train_config["lr_min"],
@@ -120,7 +120,8 @@ if __name__ == "__main__":
 
     else:
     # python status_classifier.py --mode predict --checkpoint ./checkpoints/dino_classifier.pth --image ./images/port_2.jpg
+        train_config = json.load(open("data_configs/train_config.json", "r"))
         set_seed(_SEED)
-        predict(config.checkpoint, config.image)
+        predict(config.checkpoint, config.image, train_config["class_names"])
 
     

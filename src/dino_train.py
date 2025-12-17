@@ -219,7 +219,6 @@ def train_model(custom_model, train_loader, val_loader, **kwargs):
 
 def test_model(custom_model, test_loader, class_names):
     label_list = [i for i in range(len(class_names))]
-    print(label_list)
     custom_model.to(device)
     custom_model.eval()  # set the model to evaluation mode
     all_preds = []
@@ -236,7 +235,7 @@ def test_model(custom_model, test_loader, class_names):
     logging.info(f"Test Accuracy: {accuracy:.4f}")
     logging.info("Classification Report:\n" + report)
 
-def train_classifier(project_name, train_file_directory, train_label_directory, test_file_directory, test_label_directory, num_classes=6, batch_size=_BATCH_SIZE, lr_max=_LR_init, lr_min=_LR_min, epoch=_EPOCH):
+def train_classifier(project_name, train_file_directory, train_label_directory, test_file_directory, test_label_directory, class_names, batch_size=_BATCH_SIZE, lr_max=_LR_init, lr_min=_LR_min, epoch=_EPOCH):
     # set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -248,6 +247,7 @@ def train_classifier(project_name, train_file_directory, train_label_directory, 
     init_wandb(project_name= project_name)
 
     # Load custom model
+    num_classes = len(class_names)
     custom_model = DinoClassifier(num_classes=num_classes)
     dim, num_classes,size = custom_model.get_info()
     logging.info(f"Custom Dino Classifier model created. with vit dimension of {dim} and num_classes: {num_classes} and model size: {size/1e6}M parameters")
@@ -316,7 +316,7 @@ def train_classifier(project_name, train_file_directory, train_label_directory, 
     for image_path in image_file_list:
         image = Image.open(image_path).convert('RGB')
         input_tensor = trained_model.process_image(image_path)
-        class_name, confidence = trained_model.predict(input_tensor, class_names=['unplugged', 'port1', 'port2', 'port3', 'port4', 'port5'])
+        class_name, confidence = trained_model.predict(input_tensor, class_names=class_names)
         logging.info(f"{image_path} classified as {class_name} with confidence {confidence:.4f}")
 
     # evaluate on test dataset
@@ -333,7 +333,7 @@ def train_classifier(project_name, train_file_directory, train_label_directory, 
         shuffle=False, 
         num_workers=_NUM_WORKERS
     )
-    test_model(trained_model, test_loader, class_names=['unplugged', 'port1', 'port2', 'port3', 'port4', 'port5'])
+    test_model(trained_model, test_loader, class_names=class_names)
 
     # evaluate on test dataset
     logging.info("**********************************************Test set report: **********************************************")
@@ -344,7 +344,7 @@ def train_classifier(project_name, train_file_directory, train_label_directory, 
         shuffle=False, 
         num_workers=_NUM_WORKERS
     )
-    test_model(trained_model, test_loader, class_names=['unplugged', 'port1', 'port2', 'port3', 'port4', 'port5'])
+    test_model(trained_model, test_loader, class_names=class_names)
 
 if __name__ == "__main__":
     train_file_directory = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/train"
@@ -358,7 +358,7 @@ if __name__ == "__main__":
         train_label_directory, 
         test_file_directory, 
         test_label_directory, 
-        num_classes=6, 
+        class_names=['unplugged', 'port1', 'port2', 'port3', 'port4', 'port5'],
         batch_size=_BATCH_SIZE, 
         lr_max=_LR_init, 
         lr_min=_LR_min, 
