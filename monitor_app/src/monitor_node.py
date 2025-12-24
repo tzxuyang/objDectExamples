@@ -41,8 +41,8 @@ class MonitorNode(Node):
             self.image_callback,
             10)
         self.bridge = CvBridge()
-        self.warn_publisher_ = self.create_publisher(Bool, '/monitor/monitor_warning', _FPS)
-        self.state_publisher_ = self.create_publisher(Int16, '/monitor/state_idx', _FPS)
+        self.warn_publisher_ = self.create_publisher(Bool, '/monitor/monitor_warning', 10)
+        self.state_publisher_ = self.create_publisher(Int16, '/monitor/state_idx', 10)
         self.current_frame = None
         # monitor_msg/msg/MonitorMsg.msg
         self.monitor_warning = False

@@ -11,21 +11,26 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 _VIDEO_PATH = '/home/yang/MyRepos/object_detection/videos/port_0002.mp4'
+_TIMER_PERIOD = 0.0333  # Approx 30 FPS
+_CAM_WIDTH = 424
+_CAM_HEIGHT = 240
 
 class ImagePublisher(Node):
     def __init__(self, img_size, video_path):
         super().__init__('image_publisher')
-        self.publisher_ = self.create_publisher(Image, '/camera/camera/color/image_rect_raw', 25)
+        self.publisher_ = self.create_publisher(Image, '/camera/camera/color/image_rect_raw', 10)
         self.video_path = video_path # Replace with your video file
         width, height = img_size
         self.width = width
         self.height = height
-        self.cv_image = None
+        timer_period = _TIMER_PERIOD
+        self.timer = self.create_timer(timer_period, self.timer_callback)  # Approx 30 FPS
+        self.cv_image = np.zeros((height, width, 3), dtype=np.uint8)
         self.bridge = CvBridge()
-
-    def get_image(self, cap):
-        ret, frame = cap.read()
-        logging.info(f"Total frames in video: {ret}")
+        self.cap = cv2.VideoCapture(video_path)
+    
+    def get_image(self):
+        ret, frame = self.cap.read()
         if frame is not None:
             self.cv_image = cv2.resize(frame, (self.width, self.height))
     
@@ -33,18 +38,19 @@ class ImagePublisher(Node):
         self.publisher_.publish(self.bridge.cv2_to_imgmsg(np.array(self.cv_image), "bgr8"))
         self.get_logger().info('Publishing an image')
 
+    def timer_callback(self):
+        self.get_image()
+        cv2.imshow("Camera", self.cv_image)
+        cv2.waitKey(1)
+        self.pulish_msg()
+
     def run(self):
-        cap = cv2.VideoCapture(self.video_path)
         while rclpy.ok():
-            self.get_image(cap)
-            cv2.imshow("Camera", self.cv_image)
-            cv2.waitKey(1)
-            self.pulish_msg()
-            time.sleep(0.0313)
+            rclpy.spin_once(self)
     
 def main(args=None):
     rclpy.init(args=args)
-    image_publisher = ImagePublisher(img_size = (424, 240), video_path = _VIDEO_PATH)
+    image_publisher = ImagePublisher(img_size = (_CAM_WIDTH, _CAM_HEIGHT), video_path = _VIDEO_PATH)
     logging.info("Starting image publisher...")
     try:
         image_publisher.run()
