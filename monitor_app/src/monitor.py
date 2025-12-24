@@ -8,7 +8,6 @@ project_root = os.path.dirname(os.path.dirname(project_root))
 sys.path.insert(0, project_root)
 sys.path.insert(0, os.path.join(project_root, 'src'))
 
-import cv2
 import timm
 import tyro 
 import logging
@@ -25,11 +24,10 @@ from utils import add_text_2_img, record_video_from_images
 from PIL import Image
 
 # _PROJECT_NAME = "dino_classifier_177_dino_large"
-_NUM_CLASSES = 6
 _SEED = 77
 _CLASS2INT = {"unplugged": 0, "port_1": 1, "port_2": 2, "port_3": 3, "port_4": 4, "port_5": 5}
 _INT2CLASS = {0: "unplugged", 1: "port_1", 2: "port_2", 3: "port_3", 4: "port_4", 5: "port_5"}
-_SVM_THRES = -0.4
+_SVM_THRES = -0.55
 
 @dataclass
 class ClassifierConfig:
@@ -101,7 +99,6 @@ class MonitorFSM:
     def transition(self, prediction, dt=None):
         if dt is None:
             dt = 1 / self.fps
-            print(dt)
         self._run_timer(dt)
         self.state_lst = self.state
         # Define your state transition logic here

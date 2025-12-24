@@ -3,12 +3,12 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 from std_msgs.msg import Bool
+from std_msgs.msg import Int16
 from sensor_msgs.msg import Image
 from PIL import Image as PILImage
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
-import io
 import time
 import sys
 import pickle
@@ -26,6 +26,12 @@ from monitor_app.src.monitor import load_model, status_monitor, MonitorFSM, Anor
 
 logging.basicConfig(level=logging.INFO)
 
+_DURATION_THRESHOLD = 4.5
+_BLACK_THRESHOLD = 10
+_FPS = 30
+_FILTER_TIME = 0.1
+_INT2CLASS = {0: "unplugged", 1: "port_1", 2: "port_2", 3: "port_3", 4: "port_4", 5: "port_5"}
+
 class MonitorNode(Node):
     def __init__(self):
         super().__init__('monitor_node')
@@ -35,12 +41,13 @@ class MonitorNode(Node):
             self.image_callback,
             10)
         self.bridge = CvBridge()
-        self.publisher_ = self.create_publisher(Bool, 'monitor_warning', 10)
+        self.warn_publisher_ = self.create_publisher(Bool, '/monitor/monitor_warning', _FPS)
+        self.state_publisher_ = self.create_publisher(Int16, '/monitor/state_idx', _FPS)
         self.current_frame = None
         # monitor_msg/msg/MonitorMsg.msg
         self.monitor_warning = False
         self.error_description = ""
-        self.cur_subtask_idx = -1
+        self.cur_subtask_idx = 0
         self.cur_prompt = ""
         self.value_function = 0
         self.task_status = 0
@@ -65,24 +72,55 @@ class MonitorNode(Node):
         self.reserve19 = ""
         self.reserve20 = ""       
 
+    def _image_edit(self):
+        # add_text_2_img(img, text, font_size=40, xy=(20, 20), color=(0, 0, 255)):
+        img = self.current_frame
+
+        # 2. Define text parameters
+        state_text = _INT2CLASS[self.cur_subtask_idx]
+        duration_text = f"{self.reserve10:.2f} sec in current state"
+        warning_text = "WARNING!" if self.monitor_warning else ""
+
+        state_position = (20, 20) # Bottom-left corner of the text
+        duration_position = (20, 40) # Bottom-left corner of the text
+        warning_position = (20, 60) # Bottom-left corner of the text
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.4
+        state_color = (255, 0, 0) # Blue color in BGR format
+        duration_color = (255, 0, 0) # Blue color in BGR format
+        warning_color = (0, 0, 255) # Red color in BGR format
+        thickness = 2
+        line_type = cv2.LINE_AA
+
+        # 3. Add the text to the image using cv2.putText()
+        cv2.putText(img, state_text, state_position, font, font_scale, state_color, thickness, line_type)
+        cv2.putText(img, duration_text, duration_position, font, font_scale, duration_color, thickness, line_type)
+        if self.monitor_warning:
+            cv2.putText(img, warning_text, warning_position, font, font_scale, warning_color, thickness, line_type)
+        return img
+
     def image_callback(self, msg):
         self.current_frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        cv2.imshow("Monitor Frame", self.current_frame)
+        edited_frame = self._image_edit()
+        cv2.imshow("Monitor Frame", edited_frame)
         cv2.waitKey(1)
 
     def image_issue(self):
         if self.current_frame is None:
             return False
-        if np.mean(self.current_frame) < 10:
-            print("Warning: Image frame is too dark!")
+        if np.mean(self.current_frame) < _BLACK_THRESHOLD:
             return True
-        print("Image frame is normal.")
         return False
     
     def publish_msg(self):
-        msg = Bool()
-        msg.data = self.monitor_warning
-        self.publisher_.publish(msg)
+        msg_warning = Bool()
+        msg_warning.data = self.monitor_warning
+        self.warn_publisher_.publish(msg_warning)
+
+        msg_state_idx = Int16()
+        msg_state_idx.data = self.cur_subtask_idx
+        self.state_publisher_.publish(msg_state_idx)
+        self.get_logger().info(f"Published monitor warning: {self.monitor_warning}, state idx: {self.cur_subtask_idx}")
 
     def run(self):
         train_config = json.load(open("data_configs/train_config.json", "r"))
@@ -92,16 +130,16 @@ class MonitorNode(Node):
 
         img_size = (train_config["image_size"][0], train_config["image_size"][1])
 
-        monitor_fsm = MonitorFSM(filter_time=0.1, fps=10)
-        anormally_fsm = AnormallyFSM(filter_time=0.1, fps=10)
+        monitor_fsm = MonitorFSM(filter_time=_FILTER_TIME, fps=_FPS)
+        anormally_fsm = AnormallyFSM(filter_time=0.2, fps=_FPS)
 
         while rclpy.ok():
             rclpy.spin_once(self)
-            self.monitor_warning = self.image_issue()
+            raw_image_issue = self.image_issue()
             image_cv = self.current_frame
             color_converted_image = cv2.cvtColor(image_cv, cv2.COLOR_BGR2RGB)
             image_path = PILImage.fromarray(color_converted_image)
-            status, abnormal, status_candidate, detect, duration, dist = status_monitor(
+            status, abnormal, _, _, duration, dist = status_monitor(
                 image_path, 
                 monitor_fsm, 
                 anormally_fsm, 
@@ -111,9 +149,18 @@ class MonitorNode(Node):
                 train_config["class_names"], 
                 clf
             )
-            logging.info(f"Status: {status}, Abnormal: {abnormal}, Duration: {duration:.2f} sec, Dist: {dist[0]:.2f}")
+
+            self.cur_subtask_idx = status
+            self.reserve10 = duration
+            if raw_image_issue or abnormal or duration > _DURATION_THRESHOLD:
+                self.monitor_warning = True
+            else:
+                self.monitor_warning = False
+        
+            logging.info(f"raw image issue: {raw_image_issue}, abnormal status: {abnormal}, dist: {dist} duration in state: {duration:.2f} sec")
+
             self.publish_msg()
-            time.sleep(0.1)
+            time.sleep(0.01)
 
 def main(args=None):
     rclpy.init(args=args)

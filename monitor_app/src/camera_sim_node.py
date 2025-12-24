@@ -6,16 +6,16 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 import time
-from std_msgs.msg import String
 import logging
 
 logging.basicConfig(level=logging.INFO)
 
+_VIDEO_PATH = '/home/yang/MyRepos/object_detection/videos/port_0002.mp4'
 
 class ImagePublisher(Node):
     def __init__(self, img_size, video_path):
         super().__init__('image_publisher')
-        self.publisher_ = self.create_publisher(Image, '/camera/camera/color/image_rect_raw', 10)
+        self.publisher_ = self.create_publisher(Image, '/camera/camera/color/image_rect_raw', 25)
         self.video_path = video_path # Replace with your video file
         width, height = img_size
         self.width = width
@@ -36,19 +36,17 @@ class ImagePublisher(Node):
     def run(self):
         cap = cv2.VideoCapture(self.video_path)
         while rclpy.ok():
-            # rclpy.spin_once(self)
             self.get_image(cap)
-            cv2.imshow("Video", self.cv_image)
+            cv2.imshow("Camera", self.cv_image)
             cv2.waitKey(1)
             self.pulish_msg()
             time.sleep(0.0313)
     
 def main(args=None):
     rclpy.init(args=args)
-    image_publisher = ImagePublisher(img_size = (424, 240), video_path = '/home/yang/MyRepos/object_detection/videos/port_0002.mp4')
-    print("Starting image publisher...")
+    image_publisher = ImagePublisher(img_size = (424, 240), video_path = _VIDEO_PATH)
+    logging.info("Starting image publisher...")
     try:
-        print("Running...")
         image_publisher.run()
     except KeyboardInterrupt:
         pass
