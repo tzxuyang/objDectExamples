@@ -5,12 +5,11 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
-import time
 import logging
 
 logging.basicConfig(level=logging.INFO)
 
-_VIDEO_PATH = '/home/yang/MyRepos/object_detection/videos/port_0002.mp4'
+_VIDEO_PATH = '/home/yang/MyRepos/object_detection/videos/episode6.mp4'
 _TIMER_PERIOD = 0.0333  # Approx 30 FPS
 _CAM_WIDTH = 424
 _CAM_HEIGHT = 240

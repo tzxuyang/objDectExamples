@@ -8,18 +8,13 @@ sys.path.insert(0, os.path.join(project_root, 'src'))
 
 import tyro 
 import logging
-from dataclasses import dataclass
-from src.utils import create_file_list
-from src.auto_labeling import AiLabeler, CreateClassDataset, classification_autolabel
+from dataclasses import dataclass, field, fields, MISSING
+from src.auto_labeling import classifier_autolabel_complex, classifier_autolabel, create_video, batch_label
 from src.dino_train import DinoClassifier, set_seed, train_classifier
 import json
 import pickle
 import torch
 
-# auto label model path
-_MODEL_PATH = "Qwen/Qwen3-VL-4B-Instruct"
-_AUTO_LABEL_SHOW_ITER = 5
-_AUTO_LABEL_SHOW_MAX = 50
 _PROJECT_NAME = "dino_classifier_177_dinov3_small"
 # _PROJECT_NAME = "dino_classifier_177_dino_large"
 _WANDB_KEY = "93205eda06a813b688c0462d11f09886a0cf7ae8"
@@ -33,10 +28,11 @@ class ClassifierConfig:
     wandb_key: str = _WANDB_KEY # wandb api key
     checkpoint: str = "./checkpoints/dino_classifier.pth" # yolo prediction check point
     image: str = "./images/port_2.jpg" # image path
-    train_image: str = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/train"  # autolabeling train image path
-    train_label: str = "/home/yang/MyRepos/tensorRT/datasets/port_cls/labels/train" # autolabeling train label writing path
-    val_image: str = "/home/yang/MyRepos/tensorRT/datasets/port_cls/images/val" # autolabeling val image path
-    val_label: str = "/home/yang/MyRepos/tensorRT/datasets/port_cls/labels/val" # autolabeling val label writing path
+    train_image: str = "default_value"  # autolabeling train image path
+    train_label: str = "default_value" # autolabeling train label writing path
+    val_image: str = "default_value" # autolabeling val image path
+    val_label: str = "default_value" # autolabeling val label writing path
+    image_list: list[str] = field(default_factory=list)  # autolabeling raw image list path
 
 def predict(checkpoint, image_path, new_size, class_names, data_config=None):
     dino_classifier = DinoClassifier(num_classes=_NUM_CLASSES)
@@ -55,36 +51,7 @@ def predict(checkpoint, image_path, new_size, class_names, data_config=None):
 
 def anormally_detect(model, feature_array):
     return model.predict(feature_array)
-    
-def classifier_autolabel(train_image_dir, train_label_dir, val_image_dir, val_label_dir, label_prompt, max_new_tokens=1024):
-    classifier = AiLabeler(_MODEL_PATH)
-    ClassLabel = CreateClassDataset()
 
-    # create train data set
-    root_dir = train_image_dir
-    trgt_dir = train_label_dir
-    path_list = create_file_list(root_dir)
-
-    for i, path in enumerate(path_list):
-        file_name = path.replace(root_dir, trgt_dir).replace(".jpg", ".txt")
-        logging.info(f"Processing image: {path}")
-        result, plugin, connected_port = classification_autolabel(classifier, ClassLabel, path, file_name, label_prompt, max_new_tokens=max_new_tokens)
-        if i % _AUTO_LABEL_SHOW_ITER == 0 and i < _AUTO_LABEL_SHOW_MAX:
-            logging.info(f"Description: {result}, Is Plugged In: {plugin}, Connected to Port: {connected_port}")
-        logging.info(f"Saved label file as {file_name}.")
-
-    # create val data set
-    root_dir = val_image_dir
-    trgt_dir = val_label_dir
-    path_list = create_file_list(root_dir)
-
-    for i, path in enumerate(path_list):
-        file_name = path.replace(root_dir, trgt_dir).replace(".jpg", ".txt")
-        logging.info(f"Processing image: {path}")
-        result, plugin, connected_port = classification_autolabel(classifier, ClassLabel, path, file_name, label_prompt, max_new_tokens=max_new_tokens)
-        if i % _AUTO_LABEL_SHOW_ITER == 0 and i < _AUTO_LABEL_SHOW_MAX:
-            logging.info(f"Description: {result}, Is Plugged In: {plugin}, Connected to Port: {connected_port}")
-        logging.info(f"Saved label file as {file_name}.")
 
 if __name__ == "__main__":
     config = tyro.cli(ClassifierConfig)
@@ -93,22 +60,69 @@ if __name__ == "__main__":
     # --val_image /home/yang/MyRepos/tensorRT/datasets/port_cls/images/val --val_label /home/yang/MyRepos/tensorRT/datasets/port_cls/labels/val2
     if config.mode == "autolabel":
         label_prompt = """
-        Please describe this image. Descrbe if the cable with green port is plugged in to the circular port and which port it is connected to in the format with as follows:
+        Please describe this image. Describe if the cable with a green head is plugged in a circular port, and which port it is in in the format with as follows:
         {
             "description": "",
             "Is plugged in": true/false, 
-            "connected to port (int)": "",
+            "inserted to port (int)": "",
         }
         """
-        classifier_autolabel(
+        classifier_autolabel_complex(
             train_image_dir = config.train_image, 
             train_label_dir = config.train_label, 
             val_image_dir = config.val_image, 
             val_label_dir = config.val_label, 
-            label_prompt = label_prompt, 
+            label_prompt = label_prompt,
+            step = 5,
             max_new_tokens=1024
         )
+    # # create train data set
+    # trgt_dir_img = "/home/yang/MyRepos/tensorRT/datasets/port_actibot/images/train"
+    # trgt_dir_label = "/home/yang/MyRepos/tensorRT/datasets/port_actibot/labels/train"
+    # root_dir = "/home/yang/MyRepos/tensorRT/datasets/port_actibot/episode0"
+    # root_label = "/home/yang/MyRepos/tensorRT/datasets/port_actibot/episode0.txt"
+    # batch_label(root_dir, root_label, trgt_dir_img, trgt_dir_label, step=10)
 
+    # python status_classifier.py --mode semi_autolabel_img2vid --image_list /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode0 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode1 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode2 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode3 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode4 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode5
+    elif config.mode == "semi_autolabel_img2vid":
+        image_list = config.image_list
+        for image_dir in image_list:
+            logging.info(f"Processing image dir: {image_dir} to video")
+            trgt_video_file = image_dir + ".mp4"
+            create_video(image_dir, trgt_video_file, fps=30)
+
+    # python status_classifier.py --mode semi_autolabel_label --train_image /home/yang/MyRepos/tensorRT/datasets/port_actibot/images/train --train_label /home/yang/MyRepos/tensorRT/datasets/port_actibot/labels/train --image_list /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode0 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode1 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode2 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode3 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode4
+    # python status_classifier.py --mode semi_autolabel_label --val_image /home/yang/MyRepos/tensorRT/datasets/port_actibot/images/val --val_label /home/yang/MyRepos/tensorRT/datasets/port_actibot/labels/val --image_list /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode4 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode5
+    elif config.mode == "semi_autolabel_label":
+        explicitly_passed = [f.name for f in fields(ClassifierConfig) if getattr(config, f.name) is not MISSING and getattr(config, f.name) != "default_value"]
+        if 'train_image' in explicitly_passed and 'train_label' in explicitly_passed:
+            trgt_dir_img = config.train_image
+            trgt_dir_label = config.train_label
+            for image_dir in config.image_list:
+                logging.info(f"Processing image dir: {image_dir} to labels in {trgt_dir_label}")
+                batch_label(
+                    image_dir, 
+                    image_dir + ".txt", 
+                    trgt_dir_img, 
+                    trgt_dir_label,
+                    step = 10
+                )
+        elif 'val_image' in explicitly_passed and 'val_label' in explicitly_passed:
+            trgt_dir_img = config.val_image
+            trgt_dir_label = config.val_label
+            for image_dir in config.image_list:
+                logging.info(f"Processing image dir: {image_dir} to labels in {trgt_dir_label}")
+                batch_label(
+                    image_dir, 
+                    image_dir + ".txt", 
+                    trgt_dir_img, 
+                    trgt_dir_label,
+                    step = 80,
+                    init_idx = 5
+                )
+        else:
+            logging.error("For semi_autolabel_label mode, please provide either train_image and train_label or val_image and val_label paths.")
+        
     elif config.mode == "train":
     # python status_classifier.py --mode train --project_name dino_classifier_177_dinov3_small
         train_config = json.load(open("data_configs/train_config.json", "r"))

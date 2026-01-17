@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
+from math import e
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
 from std_msgs.msg import Bool
 from std_msgs.msg import Int16
 from sensor_msgs.msg import Image
 from PIL import Image as PILImage
 from cv_bridge import CvBridge
+from arbitrator_msg.msg import Button, MonitorState
 import cv2
 import numpy as np
 import time
@@ -26,10 +27,10 @@ from monitor_app.src.monitor import load_model, status_monitor, MonitorFSM, Anor
 
 logging.basicConfig(level=logging.INFO)
 
-_DURATION_THRESHOLD = 4.5
+_DURATION_THRESHOLD = 5.5
 _BLACK_THRESHOLD = 10
 _FPS = 30
-_FILTER_TIME = 0.1
+_FILTER_TIME = 0.15
 _INT2CLASS = {0: "unplugged", 1: "port_1", 2: "port_2", 3: "port_3", 4: "port_4", 5: "port_5"}
 
 class MonitorNode(Node):
@@ -80,6 +81,8 @@ class MonitorNode(Node):
         state_text = _INT2CLASS[self.cur_subtask_idx]
         duration_text = f"{self.reserve10:.2f} sec in current state"
         warning_text = "WARNING!" if self.monitor_warning else ""
+        if self.monitor_warning and self.error_description != "":
+            warning_text += f" ({self.error_description})"
 
         state_position = (20, 20) # Bottom-left corner of the text
         duration_position = (20, 40) # Bottom-left corner of the text
@@ -154,6 +157,8 @@ class MonitorNode(Node):
             self.reserve10 = duration
             if raw_image_issue or abnormal or duration > _DURATION_THRESHOLD:
                 self.monitor_warning = True
+                if duration > _DURATION_THRESHOLD:
+                    self.error_description = "Duration Issue"
             else:
                 self.monitor_warning = False
         

@@ -9,7 +9,6 @@ sys.path.insert(0, project_root)
 sys.path.insert(0, os.path.join(project_root, 'src'))
 
 import timm
-import tyro 
 import logging
 from dataclasses import dataclass
 from src.dino_train import DinoClassifier, set_seed
