@@ -7,7 +7,7 @@ from std_msgs.msg import Int16
 from sensor_msgs.msg import Image
 from PIL import Image as PILImage
 from cv_bridge import CvBridge
-from arbitrator_msg.msg import Button, MonitorState
+from arbitrator_msg.msg import MonitorState
 import cv2
 import numpy as np
 import time
@@ -42,36 +42,34 @@ class MonitorNode(Node):
             self.image_callback,
             10)
         self.bridge = CvBridge()
-        self.warn_publisher_ = self.create_publisher(Bool, '/monitor/monitor_warning', 10)
-        self.state_publisher_ = self.create_publisher(Int16, '/monitor/state_idx', 10)
+        self.monitor_publisher_ = self.create_publisher(MonitorState, '/monitor/monitor_state', 10)
         self.current_frame = None
-        # monitor_msg/msg/MonitorMsg.msg
         self.monitor_warning = False
         self.error_description = ""
         self.cur_subtask_idx = 0
         self.cur_prompt = ""
         self.value_function = 0
         self.task_status = 0
-        self.reserve1 = False
-        self.reserve2 = False
-        self.reserve3 = False
-        self.reserve4 = False
-        self.reserve5 = False
-        self.reserve6 = 0
-        self.reserve7 = 0
-        self.reserve8 = 0
-        self.reserve9 = 0
-        self.reserve10 = 0
+        # self.reserve1 = False
+        # self.reserve2 = False
+        # self.reserve3 = False
+        # self.reserve4 = False
+        # self.reserve5 = False
+        # self.reserve6 = 0
+        # self.reserve7 = 0
+        # self.reserve8 = 0
+        # self.reserve9 = 0
+        # self.reserve10 = 0
         self.reserve11 = 0.0
-        self.reserve12 = 0.0
-        self.reserve13 = 0.0
-        self.reserve14 = 0.0
-        self.reserve15 = 0.0
-        self.reserve16 = ""
-        self.reserve17 = ""
-        self.reserve18 = ""
-        self.reserve19 = ""
-        self.reserve20 = ""       
+        # self.reserve12 = 0.0
+        # self.reserve13 = 0.0
+        # self.reserve14 = 0.0
+        # self.reserve15 = 0.0
+        # self.reserve16 = ""
+        # self.reserve17 = ""
+        # self.reserve18 = ""
+        # self.reserve19 = ""
+        # self.reserve20 = ""       
 
     def _image_edit(self):
         # add_text_2_img(img, text, font_size=40, xy=(20, 20), color=(0, 0, 255)):
@@ -79,7 +77,7 @@ class MonitorNode(Node):
 
         # 2. Define text parameters
         state_text = _INT2CLASS[self.cur_subtask_idx]
-        duration_text = f"{self.reserve10:.2f} sec in current state"
+        duration_text = f"{self.reserve11:.2f} sec in current state"
         warning_text = "WARNING!" if self.monitor_warning else ""
         if self.monitor_warning and self.error_description != "":
             warning_text += f" ({self.error_description})"
@@ -116,13 +114,11 @@ class MonitorNode(Node):
         return False
     
     def publish_msg(self):
-        msg_warning = Bool()
-        msg_warning.data = self.monitor_warning
-        self.warn_publisher_.publish(msg_warning)
-
-        msg_state_idx = Int16()
-        msg_state_idx.data = self.cur_subtask_idx
-        self.state_publisher_.publish(msg_state_idx)
+        monitor_state_msg = MonitorState()
+        monitor_state_msg.warning = self.monitor_warning
+        monitor_state_msg.error_description = self.error_description
+        monitor_state_msg.cur_subtask_idx = self.cur_subtask_idx
+        self.monitor_publisher_.publish(monitor_state_msg)
         self.get_logger().info(f"Published monitor warning: {self.monitor_warning}, state idx: {self.cur_subtask_idx}")
 
     def run(self):
@@ -154,7 +150,7 @@ class MonitorNode(Node):
             )
 
             self.cur_subtask_idx = status
-            self.reserve10 = duration
+            self.reserve11 = duration
             if raw_image_issue or abnormal or duration > _DURATION_THRESHOLD:
                 self.monitor_warning = True
                 if duration > _DURATION_THRESHOLD:
