@@ -18,7 +18,6 @@ import torch
 _PROJECT_NAME = "dino_classifier_177_dinov3_small"
 # _PROJECT_NAME = "dino_classifier_177_dino_large"
 _WANDB_KEY = "93205eda06a813b688c0462d11f09886a0cf7ae8"
-_NUM_CLASSES = 6
 _SEED = 77
 
 @dataclass
@@ -28,6 +27,7 @@ class ClassifierConfig:
     wandb_key: str = _WANDB_KEY # wandb api key
     checkpoint: str = "./checkpoints/dino_classifier.pth" # yolo prediction check point
     image: str = "./images/port_2.jpg" # image path
+    train_config: str = "data_configs/train_config_port.json" # training config json file path
     train_image: str = "default_value"  # autolabeling train image path
     train_label: str = "default_value" # autolabeling train label writing path
     val_image: str = "default_value" # autolabeling val image path
@@ -35,7 +35,7 @@ class ClassifierConfig:
     image_list: list[str] = field(default_factory=list)  # autolabeling raw image list path
 
 def predict(checkpoint, image_path, new_size, class_names, data_config=None):
-    dino_classifier = DinoClassifier(num_classes=_NUM_CLASSES)
+    dino_classifier = DinoClassifier(num_classes=len(class_names))
     dino_classifier.load_state_dict(torch.load(checkpoint))
     dino_classifier.to(device := torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     dino_classifier.eval()
@@ -124,8 +124,8 @@ if __name__ == "__main__":
             logging.error("For semi_autolabel_label mode, please provide either train_image and train_label or val_image and val_label paths.")
         
     elif config.mode == "train":
-    # python status_classifier.py --mode train --project_name dino_classifier_177_dinov3_small
-        train_config = json.load(open("data_configs/train_config_pnp.json", "r"))
+    # python status_classifier.py --mode train --train_config data_configs/train_config_pnp.json --project_name dino_classifier_177_dinov3_small
+        train_config = json.load(open(config.train_config, "r"))
         img_size = (train_config["image_size"][0], train_config["image_size"][1])
         train_classifier(
             project_name=config.project_name,
@@ -143,8 +143,8 @@ if __name__ == "__main__":
         )
 
     else:
-    # python status_classifier.py --mode predict --checkpoint ./checkpoints/dino_classifier.pth --image ./images/port_2.jpg
-        train_config = json.load(open("data_configs/train_config.json", "r"))
+    # python status_classifier.py --mode predict --train_config data_configs/train_config_pnp.json --checkpoint ./checkpoints/dino_classifier.pth --image ./images/port_2.jpg
+        train_config = json.load(open(config.train_config, "r"))
         set_seed(_SEED)
         with open("./checkpoints/anormally_detect.pkl", 'rb') as file:
             clf = pickle.load(file)
