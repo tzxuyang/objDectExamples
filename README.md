@@ -44,9 +44,16 @@ Finally the tool can be used to classify the image into predefined labels
 python src/convert_img.py --root_dir /home/yang/datasets/white_board_image2/
 ```
 
-* Step 1: autolabel
+* Step 1.1: autolabel
 ```
 python status_classifier.py --mode autolabel --train_image /home/yang/MyRepos/tensorRT/datasets/port_cls/images/train --train_label /home/yang/MyRepos/tensorRT/datasets/port_cls/labels/train --val_image /home/yang/MyRepos/tensorRT/datasets/port_cls/images/val --val_label /home/yang/MyRepos/tensorRT/datasets/port_cls/labels/val
+```
+
+* Step 1.2: semi-autolabel
+```
+python status_classifier.py --mode semi_autolabel_label --train_image /home/yang/MyRepos/tensorRT/datasets/port_actibot/images/train --train_label /home/yang/MyRepos/tensorRT/datasets/port_actibot/labels/train --image_list /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode0 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode1 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode2 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode3 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode4
+
+python status_classifier.py --mode semi_autolabel_label --val_image /home/yang/MyRepos/tensorRT/datasets/port_actibot/images/val --val_label /home/yang/MyRepos/tensorRT/datasets/port_actibot/labels/val --image_list /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode4 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode5
 ```
 
 * Step 2: train
