@@ -117,7 +117,7 @@ if __name__ == "__main__":
                     image_dir + ".txt", 
                     trgt_dir_img, 
                     trgt_dir_label,
-                    step = 80,
+                    step = 20,
                     init_idx = 5
                 )
         else:
@@ -125,7 +125,7 @@ if __name__ == "__main__":
         
     elif config.mode == "train":
     # python status_classifier.py --mode train --project_name dino_classifier_177_dinov3_small
-        train_config = json.load(open("data_configs/train_config.json", "r"))
+        train_config = json.load(open("data_configs/train_config_pnp.json", "r"))
         img_size = (train_config["image_size"][0], train_config["image_size"][1])
         train_classifier(
             project_name=config.project_name,

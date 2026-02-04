@@ -54,12 +54,18 @@ python status_classifier.py --mode autolabel --train_image /home/yang/MyRepos/te
 python status_classifier.py --mode semi_autolabel_label --train_image /home/yang/MyRepos/tensorRT/datasets/port_actibot/images/train --train_label /home/yang/MyRepos/tensorRT/datasets/port_actibot/labels/train --image_list /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode0 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode1 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode2 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode3 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode4
 
 python status_classifier.py --mode semi_autolabel_label --val_image /home/yang/MyRepos/tensorRT/datasets/port_actibot/images/val --val_label /home/yang/MyRepos/tensorRT/datasets/port_actibot/labels/val --image_list /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode4 /home/yang/MyRepos/tensorRT/datasets/port_actibot/episode5
+
+python status_classifier.py --mode semi_autolabel_label --train_image /home/yang/MyRepos/tensorRT/datasets/pick_n_place_w1/images/train --train_label /home/yang/MyRepos/tensorRT/datasets/pick_n_place_w1/labels/train --image_list /home/yang/MyRepos/tensorRT/datasets/pick_n_place_w1/episode0 /home/yang/MyRepos/tensorRT/datasets/pick_n_place_w1/episode1
+
+python status_classifier.py --mode semi_autolabel_label --val_image /home/yang/MyRepos/tensorRT/datasets/pick_n_place_w1/images/val --val_label /home/yang/MyRepos/tensorRT/datasets/pick_n_place_w1/labels/val --image_list /home/yang/MyRepos/tensorRT/datasets/pick_n_place_w1/episode0 /home/yang/MyRepos/tensorRT/datasets/pick_n_place_w1/episode1
 ```
 
 * Step 2: train
 Change the training config under /data_configs/train_config.json and run CLI:
 ```
 python status_classifier.py --mode train --project_name classifier_dinov3_small_no_augment
+
+python status_classifier.py --mode train --project_name classifier_dinov3_pick_n_place_w1_139
 ```
 The trained checkpoint will be saved in /runs/
 
