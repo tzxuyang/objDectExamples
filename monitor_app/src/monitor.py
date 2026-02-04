@@ -24,8 +24,8 @@ from PIL import Image
 
 # _PROJECT_NAME = "dino_classifier_177_dino_large"
 _SEED = 77
-_CLASS2INT = {"unplugged": 0, "port_1": 1, "port_2": 2, "port_3": 3, "port_4": 4, "port_5": 5}
-_INT2CLASS = {0: "unplugged", 1: "port_1", 2: "port_2", 3: "port_3", 4: "port_4", 5: "port_5"}
+_CLASS2INT = {"ungrabbed": 0, "grabbed_success": 1, "grabbed_fail": 2}
+_INT2CLASS = {0: "ungrabbed", 1: "grabbed_success", 2: "grabbed_fail"}
 _SVM_THRES = -0.55
 
 @dataclass
@@ -149,6 +149,60 @@ class MonitorFSM:
                 self._reset_timer()
             else:
                 self.state = 5
+
+        self.prediction_history.pop(0)
+        self.prediction_history.append(prediction)
+
+        return self.state
+    
+    def _run_timer(self, dt):
+        self.timer += dt
+
+    def _reset_timer(self):
+        self.timer = 0
+
+class PnpMonitorFSM:
+    def __init__(self, filter_time = 0.1, fps = 30):
+        self.state = 0  # Initial state
+        self.state_lst = 0 # Initial state memory
+        self.fps = fps
+        self.filter_frames = max(1, int(filter_time * fps))
+        self.prediction_history = [0] * self.filter_frames # To store recent predictions for filtering
+        self.timer = 0
+        
+    def get_state_info(self):
+        return self.state, self.state_lst, self.prediction_history
+    
+    def get_state_timer(self):
+        return self.timer
+    
+    def transition(self, prediction, dt=None):
+        if dt is None:
+            dt = 1 / self.fps
+        self._run_timer(dt)
+        self.state_lst = self.state
+        # Define your state transition logic here
+        if self.state == 0:
+            if all(predict == 1 for predict in self.prediction_history) and prediction == 1:
+                self.state = 1
+                self._reset_timer()
+            elif all(predict == 2 for predict in self.prediction_history) and prediction == 2:
+                self.state = 2
+                self._reset_timer()
+            else:
+                self.state = 0
+        elif self.state == 1:
+            if all(predict == 0 for predict in self.prediction_history) and prediction == 0:
+                self.state = 0
+                self._reset_timer()
+            else:
+                self.state = 1
+        elif self.state == 2:
+            if all(predict == 0 for predict in self.prediction_history) and prediction == 0:
+                self.state = 0
+                self._reset_timer()
+            else:
+                self.state = 2
 
         self.prediction_history.pop(0)
         self.prediction_history.append(prediction)

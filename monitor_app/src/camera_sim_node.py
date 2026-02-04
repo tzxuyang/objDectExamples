@@ -9,10 +9,10 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-_VIDEO_PATH = '/home/yang/MyRepos/object_detection/videos/episode6.mp4'
+_VIDEO_PATH = '/home/yang/MyRepos/object_detection/videos/playable.mp4'
 _TIMER_PERIOD = 0.0333  # Approx 30 FPS
-_CAM_WIDTH = 424
-_CAM_HEIGHT = 240
+_CAM_WIDTH = 640
+_CAM_HEIGHT = 480
 
 class ImagePublisher(Node):
     def __init__(self, img_size, video_path):

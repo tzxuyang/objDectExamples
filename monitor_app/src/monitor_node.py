@@ -23,15 +23,15 @@ sys.path.insert(0, project_root)
 sys.path.insert(0, os.path.join(project_root, 'monitor_app'))
 
 
-from monitor_app.src.monitor import load_model, status_monitor, MonitorFSM, AnormallyFSM
+from monitor_app.src.monitor import load_model, status_monitor, MonitorFSM, AnormallyFSM, PnpMonitorFSM
 
 logging.basicConfig(level=logging.INFO)
 
-_DURATION_THRESHOLD = 5.5
+_DURATION_THRESHOLD = 20.0
 _BLACK_THRESHOLD = 10
 _FPS = 30
 _FILTER_TIME = 0.15
-_INT2CLASS = {0: "unplugged", 1: "port_1", 2: "port_2", 3: "port_3", 4: "port_4", 5: "port_5"}
+_INT2CLASS = {0: "ungrabbed", 1: "grabbed_success", 2: "grabbed_fail"}
 
 class MonitorNode(Node):
     def __init__(self):
@@ -122,14 +122,14 @@ class MonitorNode(Node):
         self.get_logger().info(f"Published monitor warning: {self.monitor_warning}, state idx: {self.cur_subtask_idx}")
 
     def run(self):
-        train_config = json.load(open("data_configs/train_config.json", "r"))
+        train_config = json.load(open("data_configs/train_config_pnp.json", "r"))
         dino_classifier, data_config = load_model('./checkpoints/dino_classifier.pth', train_config["class_names"])
         with open("./checkpoints/anormally_detect.pkl", 'rb') as file:
             clf = pickle.load(file)
 
         img_size = (train_config["image_size"][0], train_config["image_size"][1])
 
-        monitor_fsm = MonitorFSM(filter_time=_FILTER_TIME, fps=_FPS)
+        monitor_fsm = PnpMonitorFSM(filter_time=_FILTER_TIME, fps=_FPS)
         anormally_fsm = AnormallyFSM(filter_time=0.2, fps=_FPS)
 
         while rclpy.ok():
@@ -151,7 +151,7 @@ class MonitorNode(Node):
 
             self.cur_subtask_idx = status
             self.reserve11 = duration
-            if raw_image_issue or abnormal or duration > _DURATION_THRESHOLD:
+            if raw_image_issue or abnormal or duration > _DURATION_THRESHOLD or status == 2:
                 self.monitor_warning = True
                 if duration > _DURATION_THRESHOLD:
                     self.error_description = "Duration Issue"
