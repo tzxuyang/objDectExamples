@@ -15,7 +15,6 @@ from src.dino_train import DinoClassifier, set_seed
 import json
 import torch
 import pandas as pd
-import numpy as np
 import io
 import time
 import pickle
@@ -23,9 +22,8 @@ from utils import add_text_2_img, record_video_from_images
 from PIL import Image
 
 # _PROJECT_NAME = "dino_classifier_177_dino_large"
+
 _SEED = 77
-_CLASS2INT = {"ungrabbed": 0, "grabbed_success": 1, "grabbed_fail": 2}
-_INT2CLASS = {0: "ungrabbed", 1: "grabbed_success", 2: "grabbed_fail"}
 _SVM_THRES = -0.55
 
 @dataclass
@@ -221,7 +219,8 @@ def status_monitor(current_frame, monitor_fsm, anormally_fsm, dino_classifier, d
     dist = clf.decision_function(feature)
     detect = [1] if dist > _SVM_THRES else [-1]
 
-    status_candidate = _CLASS2INT[class_name]
+    class2int = {name: idx for idx, name in enumerate(class_names)}
+    status_candidate = class2int[class_name]
     monitor_fsm.transition(status_candidate)
     status = monitor_fsm.state
     duration = monitor_fsm.get_state_timer()    
@@ -231,8 +230,8 @@ def status_monitor(current_frame, monitor_fsm, anormally_fsm, dino_classifier, d
     return status, abnormal, status_candidate, detect, duration, dist
 
 if __name__ == "__main__":
-    # python monitor_src/monitor.py --checkpoint ./checkpoints/dino_classifier.pth --image ./images/port_2.jpg
-    train_config = json.load(open("data_configs/train_config.json", "r"))
+    # python monitor_app/src/monitor.py --checkpoint ./checkpoints/dino_classifier.pth --image ./images/port_2.jpg
+    train_config = json.load(open("data_configs/train_config_port.json", "r"))
     dino_classifier, data_config = load_model('./checkpoints/dino_classifier.pth', train_config["class_names"])
     with open("./checkpoints/anormally_detect.pkl", 'rb') as file:
         clf = pickle.load(file)
@@ -279,7 +278,7 @@ if __name__ == "__main__":
             clf
         )
 
-        status_text = _INT2CLASS[status]
+        int2class = {idx: name for idx, name in enumerate(train_config["class_names"])}
         duration_text = f"{duration:.2f} sec in current state"
 
         df.loc[index, "status"] = status_candidate
@@ -287,7 +286,7 @@ if __name__ == "__main__":
         df.loc[index, "dist"] = dist
         df.loc[index, "abnormal"] = 1 if detect[0] == -1 else 0
         df.loc[index, "abnormal_filtered"] = abnormal
-        image_temp = io.BytesIO(add_text_2_img(image_path, status_text))
+        image_temp = io.BytesIO(add_text_2_img(image_path, int2class[status]))
         image_path = Image.open(image_temp)
         if duration > 4.5:
             image_temp = io.BytesIO(add_text_2_img(image_path, duration_text, font_size=20, xy = (20, 80)))

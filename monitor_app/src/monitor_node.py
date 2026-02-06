@@ -16,25 +16,36 @@ import pickle
 import logging
 import os
 import json
+import tyro
+from dataclasses import dataclass
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '.')) 
 project_root = os.path.dirname(os.path.dirname(project_root))
 sys.path.insert(0, project_root)
 sys.path.insert(0, os.path.join(project_root, 'monitor_app'))
 
-
 from monitor_app.src.monitor import load_model, status_monitor, MonitorFSM, AnormallyFSM, PnpMonitorFSM
 
 logging.basicConfig(level=logging.INFO)
 
-_DURATION_THRESHOLD = 20.0
 _BLACK_THRESHOLD = 10
 _FPS = 30
 _FILTER_TIME = 0.15
-_INT2CLASS = {0: "ungrabbed", 1: "grabbed_success", 2: "grabbed_fail"}
+
+@dataclass
+class Config:
+    config_path: str
+
+def read_config(config_path):
+    monitor_config = json.load(open(config_path, "r"))
+    duration_threshold = monitor_config.get("duration_thres")
+    class_names = monitor_config.get("class_names")
+    fsm = monitor_config.get("fsm")
+    img_size = monitor_config.get("image_size")
+    return duration_threshold, class_names, fsm, img_size
 
 class MonitorNode(Node):
-    def __init__(self):
+    def __init__(self, duration_threshold, class_names, fsm, img_size):
         super().__init__('monitor_node')
         self.subscription = self.create_subscription(
             Image,
@@ -43,6 +54,11 @@ class MonitorNode(Node):
             10)
         self.bridge = CvBridge()
         self.monitor_publisher_ = self.create_publisher(MonitorState, '/monitor/monitor_state', 10)
+        self.duration_threshold = duration_threshold
+        self.img_size = img_size
+        self.class_names = class_names
+        self.int2class = {idx: name for idx, name in enumerate(class_names)}
+        self.fsm = fsm
         self.current_frame = None
         self.monitor_warning = False
         self.error_description = ""
@@ -50,33 +66,19 @@ class MonitorNode(Node):
         self.cur_prompt = ""
         self.value_function = 0
         self.task_status = 0
-        # self.reserve1 = False
-        # self.reserve2 = False
-        # self.reserve3 = False
-        # self.reserve4 = False
-        # self.reserve5 = False
-        # self.reserve6 = 0
-        # self.reserve7 = 0
-        # self.reserve8 = 0
-        # self.reserve9 = 0
-        # self.reserve10 = 0
+        # self.reserve1-5 = False
+        # self.reserve6-10 = 0
         self.reserve11 = 0.0
-        # self.reserve12 = 0.0
-        # self.reserve13 = 0.0
-        # self.reserve14 = 0.0
-        # self.reserve15 = 0.0
-        # self.reserve16 = ""
-        # self.reserve17 = ""
-        # self.reserve18 = ""
-        # self.reserve19 = ""
-        # self.reserve20 = ""       
+        # self.reserve12-15 = 0.0
+        # self.reserve16-20 = ""
+    
 
     def _image_edit(self):
         # add_text_2_img(img, text, font_size=40, xy=(20, 20), color=(0, 0, 255)):
         img = self.current_frame
 
         # 2. Define text parameters
-        state_text = _INT2CLASS[self.cur_subtask_idx]
+        state_text = self.int2class[self.cur_subtask_idx]
         duration_text = f"{self.reserve11:.2f} sec in current state"
         warning_text = "WARNING!" if self.monitor_warning else ""
         if self.monitor_warning and self.error_description != "":
@@ -122,14 +124,15 @@ class MonitorNode(Node):
         self.get_logger().info(f"Published monitor warning: {self.monitor_warning}, state idx: {self.cur_subtask_idx}")
 
     def run(self):
-        train_config = json.load(open("data_configs/train_config_pnp.json", "r"))
-        dino_classifier, data_config = load_model('./checkpoints/dino_classifier.pth', train_config["class_names"])
+        dino_classifier, data_config = load_model('./checkpoints/dino_classifier.pth', self.class_names)
         with open("./checkpoints/anormally_detect.pkl", 'rb') as file:
             clf = pickle.load(file)
 
-        img_size = (train_config["image_size"][0], train_config["image_size"][1])
-
-        monitor_fsm = PnpMonitorFSM(filter_time=_FILTER_TIME, fps=_FPS)
+        print(self.fsm)
+        if self.fsm == "MonitorFSM":
+            monitor_fsm = MonitorFSM(filter_time=_FILTER_TIME, fps=_FPS)
+        elif self.fsm == "PnpMonitorFSM":
+            monitor_fsm = PnpMonitorFSM(filter_time=_FILTER_TIME, fps=_FPS)
         anormally_fsm = AnormallyFSM(filter_time=0.2, fps=_FPS)
 
         while rclpy.ok():
@@ -144,16 +147,16 @@ class MonitorNode(Node):
                 anormally_fsm, 
                 dino_classifier, 
                 data_config, 
-                img_size, 
-                train_config["class_names"], 
+                self.img_size, 
+                self.class_names, 
                 clf
             )
 
             self.cur_subtask_idx = status
             self.reserve11 = duration
-            if raw_image_issue or abnormal or duration > _DURATION_THRESHOLD or status == 2:
+            if raw_image_issue or abnormal or duration > self.duration_threshold or status == 2:
                 self.monitor_warning = True
-                if duration > _DURATION_THRESHOLD:
+                if duration > self.duration_threshold:
                     self.error_description = "Duration Issue"
             else:
                 self.monitor_warning = False
@@ -163,9 +166,10 @@ class MonitorNode(Node):
             self.publish_msg()
             time.sleep(0.01)
 
-def main(args=None):
-    rclpy.init(args=args)
-    monitor_node = MonitorNode()
+def main(cfg: Config)-> None:
+    duration_thres, class_names, fsm, img_size = read_config(cfg.config_path)
+    rclpy.init(args=None)
+    monitor_node = MonitorNode(duration_thres, class_names, fsm, img_size)
     try:
         monitor_node.run()
     except KeyboardInterrupt:
@@ -175,4 +179,6 @@ def main(args=None):
         rclpy.shutdown()
 
 if __name__ == '__main__':
-    main()
+    # python monitor_app/src/monitor_node.py --config_path data_configs/monitor_config_port.json
+    # python monitor_app/src/monitor_node.py --config_path data_configs/monitor_config_pnp.json
+    main(tyro.cli(Config))

@@ -6,13 +6,23 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 import logging
+import json
+import tyro
+from dataclasses import dataclass
 
 logging.basicConfig(level=logging.INFO)
 
-_VIDEO_PATH = '/home/yang/MyRepos/object_detection/videos/playable.mp4'
 _TIMER_PERIOD = 0.0333  # Approx 30 FPS
-_CAM_WIDTH = 640
-_CAM_HEIGHT = 480
+
+@dataclass
+class Config:
+    config_path: str
+
+def read_config(config_path):
+    monitor_config = json.load(open(config_path, "r"))
+    video_path = monitor_config.get("video_path")
+    img_size = monitor_config.get("image_size")
+    return video_path, (img_size[0], img_size[1])
 
 class ImagePublisher(Node):
     def __init__(self, img_size, video_path):
@@ -47,8 +57,9 @@ class ImagePublisher(Node):
         while rclpy.ok():
             rclpy.spin_once(self)
     
-def main(args=None):
-    rclpy.init(args=args)
+def main(cfg: Config)-> None:
+    _VIDEO_PATH, (_CAM_WIDTH, _CAM_HEIGHT) = read_config(cfg.config_path)
+    rclpy.init(args=None)
     image_publisher = ImagePublisher(img_size = (_CAM_WIDTH, _CAM_HEIGHT), video_path = _VIDEO_PATH)
     logging.info("Starting image publisher...")
     try:
@@ -60,4 +71,6 @@ def main(args=None):
         rclpy.shutdown()
 
 if __name__ == '__main__':
-   main()
+   # python monitor_app/src/camera_sim_node.py --config data_configs/monitor_config_port.json
+   # python monitor_app/src/camera_sim_node.py --config data_configs/monitor_config_pnp.json
+   main(tyro.cli(Config))
