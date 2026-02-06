@@ -15,7 +15,6 @@ from src.dino_train import DinoClassifier, set_seed
 import json
 import torch
 import pandas as pd
-import numpy as np
 import io
 import time
 import pickle
@@ -23,9 +22,8 @@ from utils import add_text_2_img, record_video_from_images
 from PIL import Image
 
 # _PROJECT_NAME = "dino_classifier_177_dino_large"
+
 _SEED = 77
-_CLASS2INT = {"unplugged": 0, "port_1": 1, "port_2": 2, "port_3": 3, "port_4": 4, "port_5": 5}
-_INT2CLASS = {0: "unplugged", 1: "port_1", 2: "port_2", 3: "port_3", 4: "port_4", 5: "port_5"}
 _SVM_THRES = -0.55
 
 @dataclass
@@ -161,13 +159,68 @@ class MonitorFSM:
     def _reset_timer(self):
         self.timer = 0
 
+class PnpMonitorFSM:
+    def __init__(self, filter_time = 0.1, fps = 30):
+        self.state = 0  # Initial state
+        self.state_lst = 0 # Initial state memory
+        self.fps = fps
+        self.filter_frames = max(1, int(filter_time * fps))
+        self.prediction_history = [0] * self.filter_frames # To store recent predictions for filtering
+        self.timer = 0
+        
+    def get_state_info(self):
+        return self.state, self.state_lst, self.prediction_history
+    
+    def get_state_timer(self):
+        return self.timer
+    
+    def transition(self, prediction, dt=None):
+        if dt is None:
+            dt = 1 / self.fps
+        self._run_timer(dt)
+        self.state_lst = self.state
+        # Define your state transition logic here
+        if self.state == 0:
+            if all(predict == 1 for predict in self.prediction_history) and prediction == 1:
+                self.state = 1
+                self._reset_timer()
+            elif all(predict == 2 for predict in self.prediction_history) and prediction == 2:
+                self.state = 2
+                self._reset_timer()
+            else:
+                self.state = 0
+        elif self.state == 1:
+            if all(predict == 0 for predict in self.prediction_history) and prediction == 0:
+                self.state = 0
+                self._reset_timer()
+            else:
+                self.state = 1
+        elif self.state == 2:
+            if all(predict == 0 for predict in self.prediction_history) and prediction == 0:
+                self.state = 0
+                self._reset_timer()
+            else:
+                self.state = 2
+
+        self.prediction_history.pop(0)
+        self.prediction_history.append(prediction)
+
+        return self.state
+    
+    def _run_timer(self, dt):
+        self.timer += dt
+
+    def _reset_timer(self):
+        self.timer = 0
+
 def status_monitor(current_frame, monitor_fsm, anormally_fsm, dino_classifier, data_config, img_size, class_names, clf):
     class_name, _, feature = vit_predict(dino_classifier, data_config, current_frame, img_size, class_names)
     feature = feature.detach().cpu().numpy()
     dist = clf.decision_function(feature)
     detect = [1] if dist > _SVM_THRES else [-1]
 
-    status_candidate = _CLASS2INT[class_name]
+    class2int = {name: idx for idx, name in enumerate(class_names)}
+    status_candidate = class2int[class_name]
     monitor_fsm.transition(status_candidate)
     status = monitor_fsm.state
     duration = monitor_fsm.get_state_timer()    
@@ -177,8 +230,8 @@ def status_monitor(current_frame, monitor_fsm, anormally_fsm, dino_classifier, d
     return status, abnormal, status_candidate, detect, duration, dist
 
 if __name__ == "__main__":
-    # python monitor_src/monitor.py --checkpoint ./checkpoints/dino_classifier.pth --image ./images/port_2.jpg
-    train_config = json.load(open("data_configs/train_config.json", "r"))
+    # python monitor_app/src/monitor.py --checkpoint ./checkpoints/dino_classifier.pth --image ./images/port_2.jpg
+    train_config = json.load(open("data_configs/train_config_port.json", "r"))
     dino_classifier, data_config = load_model('./checkpoints/dino_classifier.pth', train_config["class_names"])
     with open("./checkpoints/anormally_detect.pkl", 'rb') as file:
         clf = pickle.load(file)
@@ -225,7 +278,7 @@ if __name__ == "__main__":
             clf
         )
 
-        status_text = _INT2CLASS[status]
+        int2class = {idx: name for idx, name in enumerate(train_config["class_names"])}
         duration_text = f"{duration:.2f} sec in current state"
 
         df.loc[index, "status"] = status_candidate
@@ -233,7 +286,7 @@ if __name__ == "__main__":
         df.loc[index, "dist"] = dist
         df.loc[index, "abnormal"] = 1 if detect[0] == -1 else 0
         df.loc[index, "abnormal_filtered"] = abnormal
-        image_temp = io.BytesIO(add_text_2_img(image_path, status_text))
+        image_temp = io.BytesIO(add_text_2_img(image_path, int2class[status]))
         image_path = Image.open(image_temp)
         if duration > 4.5:
             image_temp = io.BytesIO(add_text_2_img(image_path, duration_text, font_size=20, xy = (20, 80)))

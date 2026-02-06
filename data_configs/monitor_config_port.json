@@ -1,0 +1,8 @@
+{
+    "video_path": "/home/yang/MyRepos/object_detection/videos/episode6.mp4",
+    "image_size": [424, 240],
+    "class_names": ["unplugged", "port_1", "port_2", "port_3", "port_4", "port_5"],
+    "svm_thres": -0.55,
+    "fsm": "MonitorFSM",
+    "duration_thres": 6.5
+}
