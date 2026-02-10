@@ -30,6 +30,7 @@ logging.basicConfig(level=logging.INFO)
 
 _BLACK_THRESHOLD = 10
 _FPS = 30
+_DOWN_SAMPLE_RATE = 3
 _FILTER_TIME = 0.15
 
 @dataclass
@@ -52,6 +53,7 @@ class MonitorNode(Node):
             '/camera/camera/color/image_rect_raw',
             self.image_callback,
             10)
+        self.count = 0
         self.bridge = CvBridge()
         self.monitor_publisher_ = self.create_publisher(MonitorState, '/monitor/monitor_state', 10)
         self.duration_threshold = duration_threshold
@@ -103,10 +105,12 @@ class MonitorNode(Node):
         return img
 
     def image_callback(self, msg):
-        self.current_frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        edited_frame = self._image_edit()
-        cv2.imshow("Monitor Frame", edited_frame)
-        cv2.waitKey(1)
+        if self.count % _DOWN_SAMPLE_RATE == 0:
+            self.current_frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            edited_frame = self._image_edit()
+            cv2.imshow("Monitor Frame", edited_frame)
+            cv2.waitKey(1)
+        self.count += 1
 
     def image_issue(self):
         if self.current_frame is None:
